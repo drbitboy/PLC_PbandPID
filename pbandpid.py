@@ -106,4 +106,18 @@ def plot_system(Ts,PVs,CVs,SP):
   
 
 if "__main__" == __name__:
-  plot_system(*run_system())
+  kwargs = dict()
+  for arg in sys.argv[1:]:
+    toks = arg.split('=')
+    tok0 = toks.pop(0)
+    L = len(toks)
+    if L == 0: val = tok0[:1] != '-'
+    else     : val = '='.join(toks)
+    kwargs[tok0.lstrip('-')] = val
+  print(kwargs)
+  if kwargs.get('help',False):
+    from inspect import signature
+    print(f"SAWTOOTH class:\n  {signature(SAWTOOTH)}")
+    print(f"PbandPDI class:\n  {signature(PbandPID)}")
+  else:
+    plot_system(*run_system(**kwargs))
