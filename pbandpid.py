@@ -1,6 +1,8 @@
 import os
+os.environ["QT_XCB_GL_INTEGRATION"] = "none"
 import sys
 import numpy
+from inspect import signature
 
 def floatmap(*args):
   return map(float,args)
@@ -31,7 +33,7 @@ N.B. Derivative action is not yet implemented
     self.CV0 = self.CV
     return self.CV
 
-  def __init__(self, CV0=3.0, CVlo=0.0, CVhi=100.0
+  def __init__(self, CV0=2.0, CVlo=0.0, CVhi=100.0
               , PVlo=0.0, PVhi=1E3, SP=400.0
               , Pband=90.0    ### Proportional Band, %
               , Is=15.0       ### Integral time, seconds
@@ -44,11 +46,11 @@ N.B. Derivative action is not yet implemented
     self.PVlo,self.PVhi,self.SP = floatmap(PVlo,PVhi,SP)
     self.Pband,self.Is,self.Ds,self.dTms = floatmap(Pband,Is,Ds,dTms)
     self.reverseActing = reverseActing
-    self.auto = False
+    self.auto,self.CV = False,self.CV0
 
-class SAWTOOTH:
+class oldSAWTOOTH:
   """Sawtooth process model"""
-  def __call__(self,dTms=0.0):
+  def __call__(self,dTms=0.0,**kwargs):
     if self.V < self.LIMlo  : recalc,self.rising = True,True
     elif self.V > self.LIMhi: recalc,self.rising = True,False
     else                    : recalc = self.rate is None
@@ -62,7 +64,7 @@ class SAWTOOTH:
     self.V += self.rate * dTms
 
     return self.V
-    
+
   def __init__(self
               ,V0=411.5
               ,LIMlo=388.5
@@ -80,30 +82,79 @@ class SAWTOOTH:
     assert self.RISEtime > 0.0
     self.rate = None
 
+CVnull=2.0 + (2.1 * 19.759 / (19.759 + 56.065))
+ratePerCV=(23.0/56.065)/(CVnull-2.0)
+
+class SAWTOOTH:
+  """Sawtooth process model - accumulation based on sticky CV"""
+  def __call__(self,dTms=0.0,CV=None,**kwargs):
+    CVminus,CVplus = CV-self.CVjump, CV+self.CVjump
+    while self.CV0 < CVminus: self.CV0 += self.CVjump
+    while self.CV0 > CVplus: self.CV0 -= self.CVjump
+
+    self.V += (self.CV0-self.CVnull) * self.ratePerCV * (dTms/1000.0)
+
+    return self.V,self.CV0
+
+  def __init__(self
+              ,V0=411.5
+              ,LIMlo=388.5
+              ,LIMhi=411.5
+              ,CV0=2.0
+              ,CVjump=2.1
+              ,CVnull=round(CVnull,3)
+              ,ratePerCV=round(ratePerCV,3)
+              ,**kwargs
+              ):
+    self.V,self.LIMlo,self.LIMhi = floatmap(V0,LIMlo,LIMhi)
+    self.CV0,self.CVjump,self.CVnull = floatmap(CV0,CVjump,CVnull)
+    assert self.LIMlo < self.LIMhi
+    assert self.CVjump > 0.0
+    self.ratePerCV,_ = floatmap(ratePerCV,0.0)
+
 def run_system(**kwargs):
   pbpid = PbandPID(**kwargs)
-  model = SAWTOOTH(**kwargs)
+  if kwargs.get("oldSAWTOOTH",False):
+    model = oldSAWTOOTH(**kwargs)
+  else:
+    model = SAWTOOTH(**kwargs)
   dTms = pbpid.dTms
-  PVs,CVs,Ts = list(),list(),list()
+  PVs,CVs,CVstickies,Ts = list(),list(),list(),list()
   for i in range(int(1 + (3600.0 / (dTms/1e3)))):
     Ts.append(i * dTms / 1e3)
-    PVs.append(model(dTms=i and dTms or 0.0))
+    PV = model(dTms=i and dTms or 0.0,CV=pbpid.CV)
+    try:
+      CVstickies.append(PV[1])
+      PV = PV[0]
+    except: CVstem = pbpid.CV
+    PVs.append(PV)
     CVs.append(pbpid(PVs[-1]))
-  return Ts,PVs,CVs,pbpid.SP
 
-def plot_system(Ts,PVs,CVs,SP):
+  return Ts,PVs,CVs,CVstickies,pbpid.SP,model
+
+def plot_system(Ts,PVs,CVs,CVstickies,SP,model):
   import matplotlib.pyplot as plt
   pvmin,pvmax = min(PVs),max(PVs)
-  cvmin,cvmax = min(CVs),max(CVs)
   cvs = pvmin + (numpy.array(CVs) * (pvmax - pvmin) / 100.0)
-  cvs2 = pvmin + ((numpy.array(CVs) - cvmin) * (pvmax - pvmin) / (cvmax - cvmin))
   ts = numpy.array(Ts) / 60.0
-  plt.axhline(y=SP,color='k',ls=':')
-  plt.plot(ts,PVs,'b',lw=1.5)
-  plt.plot(ts,cvs,'g')
-  plt.plot(ts,cvs2,'k:',lw=0.5)
+
+  fig,ax1 = plt.subplots()
+
+  ax1.axhline(y=SP,color='k',ls=':',label='SP')
+  ax1.plot(ts,PVs,'b',lw=1.5,label='PV')
+  ax1.plot(ts,cvs,'g',label='CVorig')
+  ax1.legend(loc='upper left')
+
+  ax2 = ax1.twinx()
+  ax2.plot(ts,CVs,'k',label='CV>')
+  if len(CVstickies) == len(ts):
+    ax2.plot(ts,CVstickies,'m',label='CVstem>')
+
+  ax2.legend(loc='lower right')
+
+  plt.title(f"({signature(type(model))}")
   plt.show()
-  
+
 
 if "__main__" == __name__:
   kwargs = dict()
@@ -114,9 +165,9 @@ if "__main__" == __name__:
     if L == 0: val = tok0[:1] != '-'
     else     : val = '='.join(toks)
     kwargs[tok0.lstrip('-')] = val
-  print(kwargs)
+
   if kwargs.get('help',False):
-    from inspect import signature
+    print(f"oldSAWTOOTH class:\n  {signature(oldSAWTOOTH)}")
     print(f"SAWTOOTH class:\n  {signature(SAWTOOTH)}")
     print(f"PbandPDI class:\n  {signature(PbandPID)}")
   else:
