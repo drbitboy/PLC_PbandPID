@@ -94,9 +94,12 @@ class SAWTOOTH:
 
     self.V += (self.CV0-self.CVnull) * self.ratePerCV * (dTms/1000.0)
 
-    return self.V,self.CV0
+    if self.PVsmooth: return self.V,self.CV0
+
+    return round(self.V,0),self.CV0
 
   def __init__(self
+              ,PVsmooth=False
               ,V0=411.5
               ,LIMlo=388.5
               ,LIMhi=411.5
@@ -106,6 +109,7 @@ class SAWTOOTH:
               ,ratePerCV=round(ratePerCV,3)
               ,**kwargs
               ):
+    self.PVsmooth = PVsmooth
     self.V,self.LIMlo,self.LIMhi = floatmap(V0,LIMlo,LIMhi)
     self.CV0,self.CVjump,self.CVnull = floatmap(CV0,CVjump,CVnull)
     assert self.LIMlo < self.LIMhi
@@ -146,13 +150,17 @@ def plot_system(Ts,PVs,CVs,CVstickies,SP,model):
   ax1.legend(loc='upper left')
 
   ax2 = ax1.twinx()
+
   ax2.plot(ts,CVs,'k',label='CV>')
   if len(CVstickies) == len(ts):
     ax2.plot(ts,CVstickies,'m',label='CVstem>')
 
   ax2.legend(loc='lower right')
-
   plt.title(f"({signature(type(model))}")
+  plt.xlabel('Time, minutes')
+  ax1.set_ylabel('PV, PSI')
+  ax2.set_ylabel('CV, %')
+
   plt.show()
 
 
