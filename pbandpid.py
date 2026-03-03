@@ -108,7 +108,7 @@ class SAWTOOTH:
 
   def __init__(self
               ,PVsmooth=False                ### Return non-rounded values
-              ,V0=411.5                      ### Initial value
+              ,V0=409.3                      ### Initial value
               ,ratePerCV=round(ratePerCV,3)  ### Rise/fall rate per CV unit
               ,CV0=2.0                       ### Initial CV
               ,CVjump=2.1                    ### Size of CV jumps
@@ -149,38 +149,43 @@ def run_system(**kwargs):
     PVs.append(PV)
     CVs.append(pbpid(PVs[-1]))
 
-  return Ts,PVs,CVs,CVstickies,pbpid.SP,model
+  return Ts,PVs,CVs,CVstickies,model,pbpid
 
-def plot_system(Ts,PVs,CVs,CVstickies,SP,model):
+def plot_system(Ts,PVs,CVs,CVstickies,model,pbpid):
   import matplotlib.pyplot as plt
   pvmin,pvmax = min(PVs),max(PVs)
   ### Scale CVs [0,100] range to PV range, to approximate trend from OP
   ### Convert times to minutes
-  cvs = pvmin + (numpy.array(CVs) * (pvmax - pvmin) / 100.0)
   ts = numpy.array(Ts) / 60.0
 
-  fig,ax1 = plt.subplots()
+  fig,(ax1,ax2,) = plt.subplots(2,1,sharex=True)
+
+  ### Make right-hand Y axis with 0-100 scaling for CVs on PVs plot
+  ax1cv = ax1.twinx()
+  ax1cv.set_ylim(-3.0,103.0)
+  ax1cv.plot(ts,CVs,'g',label='CV>')
 
   ### ax1 uses left axis; plot PVs and scaled CVs
-  ax1.axhline(y=SP,color='k',ls=':',label='SP')
+  ax1.axhline(y=pbpid.SP,color='k',ls=':',label='SP')
   ax1.plot(ts,PVs,'b',lw=1.5,label='PV')
-  ax1.plot(ts,cvs,'g',label='CVorig')
-  ax1.legend(loc='upper left')
-
-  ### Create right axis for unscaled CVs
-  ax2 = ax1.twinx()
 
   ### Plot CVs and, if present, the sticky CV values
-  ax2.plot(ts,CVs,'k',label='CV>')
+  ax2.axhline(y=model.CVnull,color='k',ls=':',label='CVnull')
+  ax2.plot(ts,CVs,'k',label='CV')
   if len(CVstickies) == len(ts):
-    ax2.plot(ts,CVstickies,'m',label='CVstem>')
+    ax2.plot(ts,CVstickies,'m',label='CVstem')
 
   ### Annotate plot
-  ax2.legend(loc='lower right')
-  plt.title(f"{type(model).__name__}{signature(type(model))}")
-  ax1.set_xlabel('Time, minutes')
+  ax1.set_title(f"{type(model).__name__}{signature(type(model))}")
   ax1.set_ylabel('PV, PSI')
+  ax1cv.set_ylabel('CV, %')
+  ax1.legend(loc='upper left')
+  ax1cv.legend(loc='upper right')
+
+  ax2.set_title(f"{type(pbpid).__name__}{signature(type(pbpid))}")
+  ax2.set_xlabel('Time, minutes')
   ax2.set_ylabel('CV, %')
+  ax2.legend(loc='upper left')
 
   plt.show()
 
