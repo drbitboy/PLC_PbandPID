@@ -177,7 +177,7 @@ def plot_system(Ts,PVs,CVs,CVstickies,SP,model):
 
   ### Annotate plot
   ax2.legend(loc='lower right')
-  plt.title(f"({signature(type(model))}")
+  plt.title(f"{type(model).__name__}{signature(type(model))}")
   ax1.set_xlabel('Time, minutes')
   ax1.set_ylabel('PV, PSI')
   ax2.set_ylabel('CV, %')
