@@ -45,11 +45,28 @@ N.B. Derivative action is not yet implemented
               , reverseActing=True
               , **kwargs
               ):
-    """Construct PID in Manual mode"""
+    """
+Construct PID in Manual mode
+
+ CV0, SP        Initial state for CV output and SP (setPoint)
+ PVlo, PVhi     PV/SP input scaling; PVlo/PVhi are 0%/100%
+ CVlo, CVhi     CV output scaling; CVlo/CVhi are 0/100%
+ Pband          Proportional Band, %
+ Is             Integral time, seconds
+ Ds             Derivative time*, seconds
+ dTms           Loop update time, milliseconds
+ reverseActing  Boolean; True for Reverse-Acting** PID
+
+- All arguments are keyword arguments
+- All arguments are floats unless otherwise noted
+* Derivative term is not yet implemented
+** CV output decreases as PV increases
+
+"""
     self.CV0,self.CVlo,self.CVhi = floatmap(CV0,CVlo,CVhi)
     self.PVlo,self.PVhi,self.SP = floatmap(PVlo,PVhi,SP)
     self.Pband,self.Is,self.Ds,self.dTms = floatmap(Pband,Is,Ds,dTms)
-    self.reverseActing = reverseActing
+    self.reverseActing = reverseActing and True or False
     self.auto,self.CV = False,self.CV0
 
 class oldSAWTOOTH:
