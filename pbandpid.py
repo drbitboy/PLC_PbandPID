@@ -35,6 +35,7 @@ N.B. Derivative action is not yet implemented
     self.CV0 = self.CV
     return self.CV
 
+
   def __init__(self, CV0=2.0, SP=400.0  ### Initial state
               , PVlo=0.0, PVhi=1E3      ### PV/SP input scaling
               , CVlo=0.0, CVhi=100.0    ### CV output scaling
@@ -87,6 +88,7 @@ class oldSAWTOOTH:
 
     return self.V
 
+
   def __init__(self
               ,V0=411.5         ### Initial model state value
               ,LIMlo=388.5      ### Minimum model value
@@ -96,32 +98,59 @@ class oldSAWTOOTH:
               ,rising=False     ### Whether initial state is rising
               ,**kwargs
               ):
-    """Construct sawtooth model"""
+    """
+Construct CV-independent, time-dependent sawtooth model
+
+ V0        Initial model state value
+ LIMlo     Minimum model value
+ LIMhi     Maximum model value
+ FALLtime  Time from max value to min value, s
+ RISEtime  Time from min value to max value, s
+ rising    Boolean; Initial state; True if rising
+
+- All arguments are keyword arguments
+- All arguments are floats unless otherwise noted
+
+"""
     self.V,self.LIMlo,self.LIMhi = floatmap(V0,LIMlo,LIMhi)
     self.FALLtime,self.RISEtime = floatmap(FALLtime,RISEtime)
-    self.rising = rising
+    self.rising = rising and True or False
     assert self.LIMlo < self.LIMhi
     assert self.FALLtime > 0.0
     assert self.RISEtime > 0.0
     self.rate = None
 
+### Defaults for SAWTOOTH model
 CVnull=2.0 + (2.1 * 19.759 / (19.759 + 56.065))
 ratePerCV=(23.0/56.065)/(CVnull-2.0)
 
 class SAWTOOTH:
-  """Sawtooth process model - accumulation based on sticky CV"""
+  """
+Sawtooth process model - accumulation based on sticky CV*
+
+* Sticky CV:  CV used to calculate dVmodel/dt does not change until the
+              input CV changes from current CV by at least CVjump value
+
+"""
   def __call__(self,dTms=0.0,CV=None,**kwargs):
     """Calculate one loop update based on CV position"""
+
     ### Implement sticky (jumping) CV behavior
     CVminus,CVplus = CV-self.CVjump, CV+self.CVjump
     while self.CV0 < CVminus: self.CV0 += self.CVjump
     while self.CV0 > CVplus: self.CV0 -= self.CVjump
 
+    ### Implement model:
+    ###   - dVmodel/dt = ratePerCv * (CV - CVnull)
+    ###   - Vnew = Vold + (dVmodel/dt * deltaT)
     self.V += (self.CV0-self.CVnull) * self.ratePerCV * (dTms/1000.0)
 
+    ### if .PVsmooth is True, return un-rounded Vmodel with sticky CV, ...
     if self.PVsmooth: return self.V,self.CV0
 
+    ### ... otherwise return rounded Vmodel with sticky CV
     return round(self.V,0),self.CV0
+
 
   def __init__(self
               ,PVsmooth=False                ### Return non-rounded values
@@ -132,8 +161,21 @@ class SAWTOOTH:
               ,CVnull=round(CVnull,3)        ### CV for steady-state PV
               ,**kwargs
               ):
-    """Construct sawtooth model"""
-    self.PVsmooth = PVsmooth
+    """
+Construct sticky-CV-dependent sawtooth model
+
+ PVsmooth      Boolean; False to return values rounded to whole integer values
+ V0            Initial value
+ ratePerCV     Rise/fall rate per CV unit
+ CV0           Initial CV
+ CVjump        Size of CV jumps
+ CVnull        CV for steady-state PV
+
+- All arguments are keyword arguments
+- All arguments are floats unless otherwise noted
+
+"""
+    self.PVsmooth = PVsmooth and True or False
     self.V,self.ratePerCV = floatmap(V0,ratePerCV)
     self.CV0,self.CVjump,self.CVnull = floatmap(CV0,CVjump,CVnull)
     assert self.CVjump > 0.0
